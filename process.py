@@ -71,6 +71,37 @@ def get_rot_matrix(v1, v2):
     return R
 
 
+def find_plane(pts, thresh=0.01, maxIteration=1000):
+        n_points = pts.shape[0]
+        best_eq = []
+        best_inliers = []
+
+        for it in range(maxIteration):
+
+            # samples 3 random points
+            idx = random.sample(range(0, n_points), 3)
+            samp_pts = pts[idx]
+
+            v1, v2 = samp_pts[1, :] - samp_pts[0, :], samp_pts[2, :] - samp_pts[0, :]
+            normal_ = np.cross(v1, v2)
+            normal_ = normal_ / get_norm(normal_)
+
+            k = -np.sum(np.multiply(normal_, samp_pts[1, :]))
+            plane_eq = np.array([normal_[0], normal_[1], normal_[2], k])
+
+            # distance from a point to a plane
+            pt_id_inliers = []
+            dists = np.sum(pts*plane_eq[:3], axis=1)+plane_eq[3]
+
+            # find inliers based on threshold
+            pt_id_inliers = np.where(np.abs(dists) <= thresh)[0]
+            if len(pt_id_inliers) > len(best_inliers):
+                best_eq = list(plane_eq)
+                best_inliers = list(pt_id_inliers)
+
+        return best_eq, best_inliers
+
+
 def reorient(args, geo):
     #### Want to down sample point clouds here?
 
@@ -82,9 +113,15 @@ def reorient(args, geo):
     print(f"\nNumber of points in the given point cloud: {len(pts)}")
 
     # open3d plane segmentation
-    plane_model, inliers = geo.pc.segment_plane(distance_threshold=0.01,
-                                            ransac_n=3,
-                                            num_iterations=1000)
+    if args.find_plane_method == 'open3d':
+        plane_model, inliers = geo.pc.segment_plane(distance_threshold=0.01,
+                                                ransac_n=3,
+                                                num_iterations=1000)
+    elif args.find_plane_method == 'ransac':
+        # ransac plane segmentation
+        plane_model, inliers = find_plane(pts)
+    else:
+        raise Exception("method not known!")
 
     [a, b, c, d] = plane_model
     plane_model = np.array(plane_model)
@@ -167,6 +204,11 @@ if __name__ == '__main__':
                         default='orient',
                         type=str,
                         help="What operation to perform? (orient/surface)")
+    
+    parser.add_argument('--find_plane_method',
+                        default='open3d',
+                        type=str,
+                        help="which method to use to find floor plane equation? (ransac/open3d)")
 
     parser.add_argument('--select_plane',
                         default='x',

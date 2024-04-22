@@ -27,10 +27,10 @@ Avataar Assignment Questions
 - Use the following command to reorient the point cloud such that the floor of the point cloud is aligned with the desired axis planes.
 
 ```Shell
-python process.py --pc_path='./pcs/shoe_pc.ply' --operation='orient' --select_plane='x'
+python process.py --pc_path='./pcs/shoe_pc.ply' --operation='orient' --select_plane='x' --find_plane_method='ransac'
 ```
 
-- Here the operation choosen is reorientation and the plane selected is x=0 plane (yz plane).
+- Here the operation choosen is reorientation, the plane selected is x=0 plane (yz plane), and the method to find the plane is written from scratch. Use ```find_plane_method='open3d'``` to use implementation from open3d.
 
 
 
