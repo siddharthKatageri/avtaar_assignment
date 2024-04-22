@@ -2,6 +2,8 @@ import numpy as np
 from tools import Mesho3d
 import open3d as o3d
 import random
+from scipy.spatial.transform import Rotation as R
+
 
 random.seed(0)
 np.random.seed(0)
@@ -9,9 +11,6 @@ o3d.utility.random.seed(0)
 
 
 def create_plane(a, b, c, d):
-    """
-    Create a mesh representing a plane defined by the equation ax + by + cz + d = 0.
-    """
     # Define a grid of points on the plane
     xx, yy = np.meshgrid(np.arange(-3, 3, 0.1), np.arange(-3, 3, 0.1))
     zz = (-a * xx - b * yy - d) / c
@@ -54,6 +53,7 @@ def get_to_origin(pts_plane):
 
 
 def get_rot_matrix(v1, v2):
+    # make them unit vectors
     v1 = v1/get_norm(v1)
     v2 = v2/get_norm(v2)
 
@@ -73,6 +73,10 @@ def get_rot_matrix(v1, v2):
 
 def reorient(args, geo):
     #### Want to down sample point clouds here?
+
+    # Get random rotation
+    random_rotation = R.random().as_matrix()
+    geo.pc.points = o3d.utility.Vector3dVector(np.dot(random_rotation, np.array(geo.pc.points).T).T)
 
     pts = np.array(geo.pc.points)
     print(f"\nNumber of points in the given point cloud: {len(pts)}")
@@ -106,14 +110,34 @@ def reorient(args, geo):
     aug_pts_plane = np.dot(rot_mat, aug_pts_plane.T).T
     aug_pts = np.dot(rot_mat, aug_pts.T).T
 
-    Mesho3d(v=pts_plane, f=None).write_obj("./pts_plane.obj")
-    Mesho3d(v=aug_pts_plane, f=None).write_obj("./aug_pts_plane.obj")
-    Mesho3d(v=pts, f=None).write_obj("./pts.obj")
-    Mesho3d(v=aug_pts, f=None).write_obj("./aug_pts.obj")
+    pc_name = args.pc_path.split('/')[-1][:-4]
+    Mesho3d(v=pts_plane, f=None).write_obj(f"./{pc_name}_pts_plane.obj")
+    Mesho3d(v=aug_pts_plane, f=None).write_obj(f"./{pc_name}_aug_pts_plane.obj")
+    Mesho3d(v=pts, f=None).write_obj(f"./{pc_name}_pts.obj")
+    Mesho3d(v=aug_pts, f=None).write_obj(f"./{pc_name}_aug_pts.obj")
 
 
 def change_representation(args, geo):
-    pass
+
+    pts = np.array(geo.pc.points)
+    print(f"\nNumber of points in the given point cloud: {len(pts)}")
+
+    voxel_down_pc = geo.pc.voxel_down_sample(voxel_size=0.02)
+    ds_pts = np.array(voxel_down_pc.points)
+    print(f"\nNumber of points in the down sampled point cloud: {len(ds_pts)}")
+
+    voxel_down_pc, ind = voxel_down_pc.remove_radius_outlier(nb_points=32, radius=0.05)
+    ds_pts_removal = np.array(voxel_down_pc.points)
+    print(f"\nNumber of points after outlier removal: {len(ds_pts_removal)}")
+
+    voxel_down_pc.estimate_normals()
+    mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(voxel_down_pc, depth=10)
+    
+    pc_name = args.pc_path.split('/')[-1][:-4]
+    Mesho3d(v=np.array(mesh.vertices), f=np.array(mesh.triangles)).write_obj(f"./{pc_name}_recon.obj")
+    Mesho3d(v=pts, f=None).write_obj(f"./{pc_name}_pts.obj")
+    Mesho3d(v=ds_pts, f=None).write_obj(f"./{pc_name}_ds_pts.obj")
+    Mesho3d(v=ds_pts_removal, f=None).write_obj(f"./{pc_name}_ds_pts_removal.obj")
 
 
 def main(args):
@@ -122,17 +146,11 @@ def main(args):
 
     if args.operation == 'orient':
         reorient(args, geo)
-    elif args.operation == 'represent':
+    elif args.operation == 'surface':
         change_representation(args, geo)
     else:
         raise Exception("operation not known!")
     
-
-
-
-
-    exit()
-
 
 
 if __name__ == '__main__':
@@ -148,7 +166,7 @@ if __name__ == '__main__':
     parser.add_argument('--operation',
                         default='orient',
                         type=str,
-                        help="What operation to perform? (orient/represent)")
+                        help="What operation to perform? (orient/surface)")
 
     parser.add_argument('--select_plane',
                         default='x',
